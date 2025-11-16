@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth-store';
-import { FiUsers, FiFilm, FiCalendar, FiLogOut, FiSettings, FiHome } from 'react-icons/fi';
+import { FiUsers, FiFilm, FiCalendar, FiLogOut, FiSettings, FiHome, FiFileText } from 'react-icons/fi';
 import UsersManagement from '@/components/admin/UsersManagement';
 import MoviesManagement from '@/components/admin/MoviesManagement';
 import SchedulesManagement from '@/components/admin/SchedulesManagement';
+import BlogsManagement from '@/components/admin/BlogsManagement';
 
-type TabType = 'users' | 'movies' | 'schedules';
+type TabType = 'users' | 'movies' | 'schedules' | 'blogs';
 
 export default function AdminPage() {
   const router = useRouter();
@@ -120,6 +121,17 @@ export default function AdminPage() {
               <FiCalendar className="text-lg" />
               <span className="font-semibold">Lịch chiếu</span>
             </button>
+            <button
+              onClick={() => setActiveTab('blogs')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 mt-2 ${
+                activeTab === 'blogs'
+                  ? 'bg-gradient-to-r from-[#FF6B35] to-[#FF8C42] text-white shadow-lg'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <FiFileText className="text-lg" />
+              <span className="font-semibold">Blog</span>
+            </button>
           </div>
         </nav>
 
@@ -144,6 +156,7 @@ export default function AdminPage() {
           {activeTab === 'users' && <UsersManagement />}
           {activeTab === 'movies' && <MoviesManagement />}
           {activeTab === 'schedules' && <SchedulesManagement />}
+          {activeTab === 'blogs' && <BlogsManagement />}
         </div>
       </div>
     </div>

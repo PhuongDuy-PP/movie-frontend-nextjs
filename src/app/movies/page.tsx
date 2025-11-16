@@ -3,17 +3,26 @@
 import { useQuery } from '@tanstack/react-query';
 import { movieAPI } from '@/lib/api';
 import MovieCard from '@/components/MovieCard';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { FiSearch } from 'react-icons/fi';
+import { FiSearch, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+
+const ITEMS_PER_PAGE = 12;
 
 export default function MoviesPage() {
   const searchParams = useSearchParams();
   const status = searchParams.get('status') as 'now-showing' | 'coming-soon' | null;
-  const [searchQuery, setSearchQuery] = useState('');
+  const searchFromUrl = searchParams.get('search') || '';
+  const [searchQuery, setSearchQuery] = useState(searchFromUrl);
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'now-showing' | 'coming-soon'>(
     status || 'all'
   );
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Update search query when URL param changes
+  useEffect(() => {
+    setSearchQuery(searchFromUrl);
+  }, [searchFromUrl]);
 
   const { data: movies, isLoading } = useQuery({
     queryKey: ['movies', selectedStatus],
@@ -37,10 +46,68 @@ export default function MoviesPage() {
     },
   });
 
-  const filteredMovies = movies?.filter((movie: any) =>
-    movie.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    movie.genre.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredMovies = movies?.filter((movie: any) => {
+    if (!searchQuery.trim()) return true;
+    
+    const query = searchQuery.toLowerCase().trim();
+    const titleMatch = movie.title?.toLowerCase().includes(query) || false;
+    const genreMatch = movie.genre?.toLowerCase().includes(query) || false;
+    const directorMatch = movie.director?.toLowerCase().includes(query) || false;
+    // Check actors - assuming actors is a string or array
+    const actors = movie.actors || '';
+    const actorsMatch = Array.isArray(actors)
+      ? actors.some((actor: string) => actor.toLowerCase().includes(query))
+      : actors.toLowerCase().includes(query);
+    
+    return titleMatch || genreMatch || directorMatch || actorsMatch;
+  });
+
+  // Reset page when status or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedStatus, searchQuery]);
+
+  // Calculate pagination
+  const totalMovies = filteredMovies?.length || 0;
+  const totalPages = Math.ceil(totalMovies / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedMovies = filteredMovies?.slice(startIndex, endIndex) || [];
+
+  // Generate page numbers
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+    
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i);
+        }
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        pages.push(1);
+        pages.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i);
+        }
+        pages.push('...');
+        pages.push(totalPages);
+      }
+    }
+    return pages;
+  };
 
   return (
     <div className="bg-gray-50 min-h-screen w-full">
@@ -117,15 +184,74 @@ export default function MoviesPage() {
           </div>
         </div>
       ) : filteredMovies?.length > 0 ? (
-        <div className="flex justify-center w-full">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 w-full max-w-[1280px]">
-            {filteredMovies.map((movie: any) => (
-              <div key={movie.id} className="w-full">
-                <MovieCard movie={movie} />
-              </div>
-            ))}
+        <>
+          <div className="flex justify-center w-full mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 w-full max-w-[1280px]">
+              {paginatedMovies.map((movie: any) => (
+                <div key={movie.id} className="w-full">
+                  <MovieCard movie={movie} />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center space-x-2 mt-12">
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center space-x-1 ${
+                  currentPage === 1
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-white text-gray-700 hover:bg-[#FF6B35] hover:text-white shadow-md hover:shadow-lg'
+                }`}
+              >
+                <FiChevronLeft />
+                <span>Trước</span>
+              </button>
+
+              <div className="flex items-center space-x-1">
+                {getPageNumbers().map((page, index) => (
+                  <button
+                    key={index}
+                    onClick={() => typeof page === 'number' && setCurrentPage(page)}
+                    disabled={page === '...'}
+                    className={`w-10 h-10 rounded-lg font-semibold transition-all ${
+                      page === '...'
+                        ? 'text-gray-400 cursor-default'
+                        : page === currentPage
+                        ? 'bg-[#FF6B35] text-white shadow-lg scale-110'
+                        : 'bg-white text-gray-700 hover:bg-[#FF6B35] hover:text-white shadow-md hover:shadow-lg'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center space-x-1 ${
+                  currentPage === totalPages
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-white text-gray-700 hover:bg-[#FF6B35] hover:text-white shadow-md hover:shadow-lg'
+                }`}
+              >
+                <span>Sau</span>
+                <FiChevronRight />
+              </button>
+            </div>
+          )}
+
+          {/* Page Info */}
+          {totalPages > 1 && (
+            <div className="text-center mt-4 text-gray-600 text-sm">
+              Hiển thị {startIndex + 1}-{Math.min(endIndex, totalMovies)} trong tổng số {totalMovies} phim
+            </div>
+          )}
+        </>
       ) : (
         <div className="text-center py-20">
           <div className="max-w-md mx-auto">

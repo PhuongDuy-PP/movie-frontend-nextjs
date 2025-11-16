@@ -368,33 +368,62 @@ export default function CinemasPage() {
                           {/* Schedule Times Grid - Compact */}
                           <div className="p-2">
                             <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2.5 md:gap-3 justify-items-center">
-                              {group.schedules.map((schedule: any) => (
-                                <Link
-                                  key={schedule.id}
-                                  href={`/booking?scheduleId=${schedule.id}`}
-                                  className="group bg-gradient-to-br from-[#FF6B35] to-[#FF8C42] text-white rounded-lg p-2.5 md:p-3 hover:from-[#E55A2B] hover:to-[#FF6B35] transition-all duration-200 transform hover:scale-105 hover:shadow-lg active:scale-95 w-full max-w-[100px]"
-                                >
-                                  <div className="text-center space-y-1.5">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <FiClock className="text-[10px] opacity-90" />
-                                      <span className="font-black text-sm md:text-base">
-                                        {format(new Date(schedule.showTime), 'HH:mm')}
-                                      </span>
-                                    </div>
-                                    <div className="text-[10px] opacity-95 font-semibold">
-                                      Phòng {schedule.room}
-                                    </div>
-                                    <div className="text-[10px] font-black pt-1 mt-1 border-t border-white/30">
-                                      {(schedule.price / 1000).toFixed(0)}k
-                                    </div>
-                                    {schedule.availableSeats < 10 && (
-                                      <div className="text-[9px] opacity-80 bg-white/20 rounded-full px-1.5 py-0.5 mt-1">
-                                        {schedule.availableSeats} ghế
+                              {group.schedules.map((schedule: any) => {
+                                const showTime = new Date(schedule.showTime);
+                                const now = new Date();
+                                const isPast = showTime < now;
+                                
+                                return isPast ? (
+                                  <div
+                                    key={schedule.id}
+                                    className="group bg-gradient-to-br from-gray-300 to-gray-400 text-white rounded-lg p-2.5 md:p-3 w-full max-w-[100px] opacity-60 cursor-not-allowed relative"
+                                  >
+                                    <div className="text-center space-y-1.5">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <FiClock className="text-[10px] opacity-70" />
+                                        <span className="font-black text-sm md:text-base line-through">
+                                          {format(showTime, 'HH:mm')}
+                                        </span>
                                       </div>
-                                    )}
+                                      <div className="text-[10px] opacity-80 font-semibold">
+                                        Phòng {schedule.room}
+                                      </div>
+                                      <div className="text-[10px] font-black pt-1 mt-1 border-t border-white/30">
+                                        {(schedule.price / 1000).toFixed(0)}k
+                                      </div>
+                                      <div className="text-[9px] opacity-90 bg-white/20 rounded-full px-1.5 py-0.5 mt-1 font-semibold">
+                                        Đã qua
+                                      </div>
+                                    </div>
                                   </div>
-                                </Link>
-                              ))}
+                                ) : (
+                                  <Link
+                                    key={schedule.id}
+                                    href={`/booking?scheduleId=${schedule.id}`}
+                                    className="group bg-gradient-to-br from-[#FF6B35] to-[#FF8C42] text-white rounded-lg p-2.5 md:p-3 hover:from-[#E55A2B] hover:to-[#FF6B35] transition-all duration-200 transform hover:scale-105 hover:shadow-lg active:scale-95 w-full max-w-[100px]"
+                                  >
+                                    <div className="text-center space-y-1.5">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <FiClock className="text-[10px] opacity-90" />
+                                        <span className="font-black text-sm md:text-base">
+                                          {format(showTime, 'HH:mm')}
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] opacity-95 font-semibold">
+                                        Phòng {schedule.room}
+                                      </div>
+                                      <div className="text-[10px] font-black pt-1 mt-1 border-t border-white/30">
+                                        {(schedule.price / 1000).toFixed(0)}k
+                                      </div>
+                                      {schedule.availableSeats < 10 && (
+                                        <div className="text-[9px] opacity-80 bg-white/20 rounded-full px-1.5 py-0.5 mt-1">
+                                          {schedule.availableSeats} ghế
+                                        </div>
+                                      )}
+                                    </div>
+                                  </Link>
+                                );
+                              })}
                             </div>
                           </div>
                         </div>

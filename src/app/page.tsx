@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { movieAPI } from '@/lib/api';
+import { movieAPI, blogAPI } from '@/lib/api';
 import { Movie } from '@/types';
 import MovieCard from '@/components/MovieCard';
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -10,13 +10,20 @@ import 'swiper/css';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
 import Link from 'next/link';
-import { FiPlay, FiCalendar, FiMapPin, FiX } from 'react-icons/fi';
+import Image from 'next/image';
+import { FiPlay, FiCalendar, FiMapPin, FiX, FiUser, FiEye, FiArrowRight } from 'react-icons/fi';
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 
 export default function Home() {
   const { data: movies, isLoading: moviesLoading } = useQuery({
     queryKey: ['movies'],
     queryFn: () => movieAPI.getAll().then((res) => res.data),
+  });
+
+  const { data: blogs, isLoading: blogsLoading } = useQuery({
+    queryKey: ['blogs', 'featured'],
+    queryFn: () => blogAPI.getAll(true).then((res) => res.data),
   });
 
   const [showTrailer, setShowTrailer] = useState(false);
@@ -50,7 +57,7 @@ export default function Home() {
     }, 300);
   };
 
-  const featuredMovies = movies?.slice(0, 5) || [];
+  const featuredMovies = Array.isArray(movies) ? movies.slice(0, 5) : [];
 
   return (
     <div className="bg-white">
@@ -140,31 +147,55 @@ export default function Home() {
               <span className="group-hover:translate-x-1 transition-transform">→</span>
             </Link>
           </div>
-          <div className="flex justify-center">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-[1280px] w-full">
+          <div className="relative">
+            <Swiper
+              modules={[Navigation]}
+              navigation
+              spaceBetween={24}
+              slidesPerView={1}
+              breakpoints={{
+                640: {
+                  slidesPerView: 2,
+                },
+                768: {
+                  slidesPerView: 3,
+                },
+                1024: {
+                  slidesPerView: 4,
+                },
+                1280: {
+                  slidesPerView: 5,
+                },
+              }}
+              className="!pb-4"
+              style={{
+                '--swiper-navigation-color': '#FF6B35',
+              } as React.CSSProperties}
+            >
               {moviesLoading ? (
-                [1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    className="bg-gray-200 animate-pulse h-96 rounded-xl w-full"
-                  />
+                [1, 2, 3, 4, 5, 6].map((i) => (
+                  <SwiperSlide key={i}>
+                    <div className="bg-gray-200 animate-pulse h-96 rounded-xl w-full" />
+                  </SwiperSlide>
                 ))
               ) : (
-                movies
-                  ?.filter((movie: Movie) => {
-                    const releaseDate = new Date(movie.releaseDate);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    return releaseDate <= today;
-                  })
-                  .slice(0, 8)
-                  .map((movie: Movie) => (
-                    <div key={movie.id} className="w-full">
-                      <MovieCard movie={movie} />
-                    </div>
-                  ))
+                Array.isArray(movies)
+                  ? movies
+                      .filter((movie: Movie) => {
+                        const releaseDate = new Date(movie.releaseDate);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        return releaseDate <= today;
+                      })
+                      .slice(0, 10)
+                      .map((movie: Movie) => (
+                        <SwiperSlide key={movie.id}>
+                          <MovieCard movie={movie} />
+                        </SwiperSlide>
+                      ))
+                  : null
               )}
-            </div>
+            </Swiper>
           </div>
         </div>
       </section>
@@ -185,31 +216,55 @@ export default function Home() {
               <span className="group-hover:translate-x-1 transition-transform">→</span>
             </Link>
           </div>
-          <div className="flex justify-center">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-[1280px] w-full">
+          <div className="relative">
+            <Swiper
+              modules={[Navigation]}
+              navigation
+              spaceBetween={24}
+              slidesPerView={1}
+              breakpoints={{
+                640: {
+                  slidesPerView: 2,
+                },
+                768: {
+                  slidesPerView: 3,
+                },
+                1024: {
+                  slidesPerView: 4,
+                },
+                1280: {
+                  slidesPerView: 5,
+                },
+              }}
+              className="!pb-4"
+              style={{
+                '--swiper-navigation-color': '#FF6B35',
+              } as React.CSSProperties}
+            >
               {moviesLoading ? (
-                [1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    className="bg-gray-200 animate-pulse h-96 rounded-xl w-full"
-                  />
+                [1, 2, 3, 4, 5, 6].map((i) => (
+                  <SwiperSlide key={i}>
+                    <div className="bg-gray-200 animate-pulse h-96 rounded-xl w-full" />
+                  </SwiperSlide>
                 ))
               ) : (
-                movies
-                  ?.filter((movie: Movie) => {
-                    const releaseDate = new Date(movie.releaseDate);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    return releaseDate > today;
-                  })
-                  .slice(0, 4)
-                  .map((movie: Movie) => (
-                    <div key={movie.id} className="w-full">
-                      <MovieCard movie={movie} />
-                    </div>
-                  ))
+                Array.isArray(movies)
+                  ? movies
+                      .filter((movie: Movie) => {
+                        const releaseDate = new Date(movie.releaseDate);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        return releaseDate > today;
+                      })
+                      .slice(0, 10)
+                      .map((movie: Movie) => (
+                        <SwiperSlide key={movie.id}>
+                          <MovieCard movie={movie} />
+                        </SwiperSlide>
+                      ))
+                  : null
               )}
-            </div>
+            </Swiper>
           </div>
         </div>
       </section>
@@ -259,35 +314,100 @@ export default function Home() {
       </section>
 
       {/* Blog Section */}
-      <section className="w-full bg-gray-50 py-16">
+      <section className="w-full bg-gradient-to-br from-gray-50 to-gray-100 py-16">
         <div className="container mx-auto px-4">
-          <div className="flex flex-col items-center mb-10 text-center">
+          <div className="flex flex-col items-center mb-12 text-center">
             <div className="mb-4">
-              <h2 className="text-4xl font-black text-gray-900 mb-2">Tin tức & Blog</h2>
-              <p className="text-gray-600">Cập nhật những tin tức mới nhất về điện ảnh</p>
+              <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-3">Tin tức & Blog</h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                Cập nhật những tin tức mới nhất về điện ảnh, giải trí và xu hướng phim ảnh
+              </p>
             </div>
             <Link
               href="/blog"
-              className="text-[#FF6B35] hover:text-[#E55A2B] font-semibold text-lg flex items-center space-x-1 group"
+              className="text-[#FF6B35] hover:text-[#E55A2B] font-semibold text-lg flex items-center space-x-2 group mt-4"
             >
-              <span>Xem tất cả</span>
-              <span className="group-hover:translate-x-1 transition-transform">→</span>
+              <span>Xem tất cả bài viết</span>
+              <FiArrowRight className="group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
-          <div className="flex justify-center">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-[1280px]">
-              {/* Blog cards will be added here */}
-              <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow overflow-hidden group w-full">
-                <div className="h-48 bg-gradient-to-br from-gray-200 to-gray-300 rounded-t-xl mb-4 group-hover:scale-105 transition-transform duration-300"></div>
-                <div className="p-6">
-                  <h3 className="font-bold text-xl mb-2 text-gray-900 group-hover:text-[#FF6B35] transition-colors">Tin tức phim</h3>
-                  <p className="text-gray-600">
-                    Cập nhật những tin tức mới nhất về phim ảnh và giải trí
-                  </p>
+          
+          {blogsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-[1280px] mx-auto">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                  <div className="h-56 bg-gray-200 animate-pulse" />
+                  <div className="p-6">
+                    <div className="h-6 bg-gray-200 animate-pulse rounded mb-3" />
+                    <div className="h-4 bg-gray-200 animate-pulse rounded mb-2" />
+                    <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
+                  </div>
                 </div>
+              ))}
+            </div>
+          ) : Array.isArray(blogs) && blogs.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-[1280px] mx-auto">
+              {blogs.slice(0, 3).map((blog: any) => (
+                <Link
+                  key={blog.id}
+                  href={`/blog/${blog.id}`}
+                  className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden group transform hover:-translate-y-2"
+                >
+                  <div className="relative h-56 overflow-hidden">
+                    {blog.image ? (
+                      <Image
+                        src={blog.image}
+                        alt={blog.title}
+                        fill
+                        className="object-cover group-hover:scale-110 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-[#FF6B35] to-[#E55A2B] flex items-center justify-center">
+                        <FiCalendar className="text-6xl text-white/30" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  </div>
+                  <div className="p-6">
+                    <h3 className="text-xl font-bold text-gray-900 mb-3 line-clamp-2 group-hover:text-[#FF6B35] transition-colors">
+                      {blog.title}
+                    </h3>
+                    {blog.excerpt && (
+                      <p className="text-gray-600 mb-4 line-clamp-3 text-sm leading-relaxed">
+                        {blog.excerpt}
+                      </p>
+                    )}
+                    <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
+                      <div className="flex items-center space-x-3">
+                        {blog.author && (
+                          <div className="flex items-center space-x-1">
+                            <FiUser className="text-[#FF6B35]" />
+                            <span className="font-medium">{blog.author.fullName || 'Admin'}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center space-x-1">
+                          <FiCalendar className="text-[#FF6B35]" />
+                          <span>{format(new Date(blog.createdAt), 'dd/MM/yyyy')}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <FiEye className="text-[#FF6B35]" />
+                        <span>{blog.views || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 max-w-[1280px] mx-auto">
+              <div className="bg-white rounded-2xl shadow-lg p-12">
+                <FiCalendar className="text-6xl text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-600 text-lg">Chưa có bài viết nào</p>
+                <p className="text-gray-500 text-sm mt-2">Hãy quay lại sau để xem những tin tức mới nhất</p>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </section>
 

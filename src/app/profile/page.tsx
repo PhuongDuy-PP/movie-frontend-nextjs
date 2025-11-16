@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth-store';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, bookingAPI, authAPI } from '@/lib/api';
-import { FiUser, FiMail, FiPhone, FiLock, FiEdit, FiSave, FiX, FiCalendar, FiFilm, FiMapPin, FiClock, FiCheck, FiAlertCircle } from 'react-icons/fi';
+import { FiUser, FiMail, FiPhone, FiLock, FiEdit, FiSave, FiX, FiCalendar, FiFilm, FiMapPin, FiClock, FiCheck, FiAlertCircle, FiCamera } from 'react-icons/fi';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import Image from 'next/image';
+import AvatarCropModal from '@/components/AvatarCropModal';
 
 // Helper function to safely format date
 const safeFormatDate = (date: string | Date | null | undefined, formatStr: string, fallback: string = 'N/A'): string => {
@@ -20,6 +21,25 @@ const safeFormatDate = (date: string | Date | null | undefined, formatStr: strin
   } catch {
     return fallback;
   }
+};
+
+// Helper function to get full avatar URL
+const getAvatarUrl = (avatarPath: string | undefined | null): string | null => {
+  if (!avatarPath) return null;
+  
+  // If already a full URL (starts with http:// or https://), return as is
+  if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
+    return avatarPath;
+  }
+  
+  // If relative path (starts with /), prepend backend URL
+  if (avatarPath.startsWith('/')) {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    return `${backendUrl}${avatarPath}`;
+  }
+  
+  // Otherwise return as is (shouldn't happen but just in case)
+  return avatarPath;
 };
 
 export default function ProfilePage() {
@@ -39,6 +59,12 @@ export default function ProfilePage() {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarTimestamp, setAvatarTimestamp] = useState<number>(Date.now());
+  const [showCropModal, setShowCropModal] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -73,21 +99,29 @@ export default function ProfilePage() {
   });
 
   // Use updated user if available, otherwise use user from store
+  // Ensure we always have user data
   const currentUser = updatedUser || user;
+  
+  // Safety check - if no user, don't render (will redirect)
+  if (!currentUser && isAuthenticated) {
+    // If authenticated but no user data, try to refetch
+    queryClient.refetchQueries({ queryKey: ['user', user?.id] });
+  }
 
   // Initialize form data when user is loaded
   useEffect(() => {
-    if (currentUser) {
+    const userData = currentUser || user;
+    if (userData) {
       setFormData({
-        fullName: currentUser.fullName || '',
-        phone: currentUser.phone || '',
+        fullName: userData.fullName || '',
+        phone: userData.phone || '',
       });
       // Update user in store if we got updated data
       if (updatedUser) {
         setUser(updatedUser);
       }
     }
-  }, [currentUser, updatedUser, setUser]);
+  }, [currentUser, user, updatedUser, setUser]);
 
   // Fetch user bookings
   const { data: bookings, isLoading: isLoadingBookings } = useQuery({
@@ -112,6 +146,87 @@ export default function ProfilePage() {
     onError: (error: any) => {
       setError(error.response?.data?.message || 'Có lỗi xảy ra khi cập nhật thông tin');
       setSuccess('');
+    },
+  });
+
+  // Upload avatar mutation
+  const uploadAvatarMutation = useMutation({
+    mutationFn: (file: File) => authAPI.uploadAvatar(file),
+    onSuccess: async (response) => {
+      try {
+        // Refetch user profile to get updated avatar URL
+        const profileResponse = await authAPI.getProfile();
+        const updatedUserData = profileResponse.data;
+        
+        // Merge with existing user data to ensure no fields are lost
+        if (updatedUserData && user) {
+          const mergedUser: User = {
+            ...user,
+            ...updatedUserData,
+            // Preserve all required fields
+            id: updatedUserData.id || user.id,
+            email: updatedUserData.email || user.email,
+            fullName: updatedUserData.fullName || user.fullName,
+            phone: updatedUserData.phone || user.phone,
+            role: updatedUserData.role || user.role,
+            isActive: updatedUserData.isActive !== undefined ? updatedUserData.isActive : user.isActive,
+            createdAt: updatedUserData.createdAt || user.createdAt,
+            updatedAt: updatedUserData.updatedAt || user.updatedAt,
+            // Ensure avatar is updated
+            avatar: updatedUserData.avatar || user.avatar,
+          };
+          setUser(mergedUser);
+        } else if (updatedUserData) {
+          setUser(updatedUserData);
+        } else if (user) {
+          // If no updated data but user exists, just update avatar from response if available
+          const responseData = response.data?.user || response.data;
+          if (responseData?.avatar) {
+            setUser({ ...user, avatar: responseData.avatar });
+          }
+        }
+        
+        // Clear preview and update state
+        setAvatarPreview(null);
+        setSuccess('Cập nhật avatar thành công!');
+        setError('');
+        setTimeout(() => setSuccess(''), 3000);
+        
+        // Invalidate and refetch user queries
+        await queryClient.invalidateQueries({ queryKey: ['user', user?.id] });
+        await queryClient.refetchQueries({ queryKey: ['user', user?.id] });
+        
+        // Update timestamp to force image reload
+        setAvatarTimestamp(Date.now());
+      } catch (error) {
+        // If getProfile fails, try to use response data or merge with existing user
+        const responseUser = response.data?.user || response.data;
+        if (responseUser && user) {
+          // Merge with existing user to preserve all fields
+          const mergedUser = {
+            ...user,
+            ...responseUser,
+            avatar: responseUser.avatar || user.avatar,
+          };
+          setUser(mergedUser);
+        } else if (responseUser) {
+          setUser(responseUser);
+        }
+        
+        setAvatarPreview(null);
+        setSuccess('Cập nhật avatar thành công!');
+        setError('');
+        setTimeout(() => setSuccess(''), 3000);
+        queryClient.invalidateQueries({ queryKey: ['user', user?.id] });
+        // Update timestamp to force image reload
+        setAvatarTimestamp(Date.now());
+      }
+      setIsUploadingAvatar(false);
+    },
+    onError: (error: any) => {
+      setError(error.response?.data?.message || 'Có lỗi xảy ra khi upload avatar');
+      setSuccess('');
+      setIsUploadingAvatar(false);
     },
   });
 
@@ -192,6 +307,51 @@ export default function ProfilePage() {
       currentPassword: passwordData.currentPassword,
       newPassword: passwordData.newPassword,
     });
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Vui lòng chọn file ảnh');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Kích thước file không được vượt quá 5MB');
+      return;
+    }
+
+    // Create preview and open crop modal
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const imageSrc = reader.result as string;
+      setImageToCrop(imageSrc);
+      setShowCropModal(true);
+    };
+    reader.readAsDataURL(file);
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleCropComplete = (croppedFile: File) => {
+    // Upload cropped image
+    setIsUploadingAvatar(true);
+    setError('');
+    setAvatarPreview(URL.createObjectURL(croppedFile));
+    uploadAvatarMutation.mutate(croppedFile);
+    setShowCropModal(false);
+    setImageToCrop(null);
   };
 
   // Show loading state while hydrating
@@ -299,20 +459,62 @@ export default function ProfilePage() {
               <div className="space-y-6">
                 {/* Avatar */}
                 <div className="flex items-center gap-6">
-                  <div className="w-24 h-24 bg-gradient-to-br from-[#FF6B35] to-[#FF8C42] rounded-full flex items-center justify-center shadow-lg">
-                    <span className="text-3xl font-black text-white">
-                      {currentUser.fullName?.charAt(0).toUpperCase() || 'U'}
-                    </span>
+                  <div className="relative group">
+                    <div className="relative w-24 h-24 rounded-full overflow-hidden shadow-lg ring-4 ring-white">
+                      {(currentUser?.avatar || user?.avatar || avatarPreview) ? (
+                        <Image
+                          key={avatarTimestamp}
+                          src={
+                            avatarPreview 
+                              ? avatarPreview 
+                              : (() => {
+                                  const avatarUrl = getAvatarUrl(currentUser?.avatar || user?.avatar);
+                                  return avatarUrl ? `${avatarUrl}?t=${avatarTimestamp}` : '';
+                                })()
+                          }
+                          alt={currentUser?.fullName || user?.fullName || 'Avatar'}
+                          fill
+                          className="object-cover"
+                          sizes="96px"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-[#FF6B35] to-[#FF8C42] flex items-center justify-center">
+                          <span className="text-3xl font-black text-white">
+                            {(currentUser?.fullName || user?.fullName)?.charAt(0).toUpperCase() || 'U'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleAvatarClick}
+                      disabled={isUploadingAvatar}
+                      className="absolute bottom-0 right-0 w-10 h-10 bg-[#FF6B35] text-white rounded-full flex items-center justify-center shadow-lg hover:bg-[#E55A2B] transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed group-hover:scale-110"
+                      title="Đổi avatar"
+                    >
+                      {isUploadingAvatar ? (
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <FiCamera className="text-lg" />
+                      )}
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                    />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-gray-900 mb-1">{currentUser.fullName}</h3>
-                    <p className="text-gray-600">{currentUser.email}</p>
+                    <h3 className="text-2xl font-black text-gray-900 mb-1">{currentUser?.fullName || user?.fullName || 'Người dùng'}</h3>
+                    <p className="text-gray-600">{currentUser?.email || user?.email || ''}</p>
                     <span className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold ${
-                      currentUser.role === 'admin'
+                      (currentUser?.role || user?.role) === 'admin'
                         ? 'bg-purple-100 text-purple-800'
                         : 'bg-blue-100 text-blue-800'
                     }`}>
-                      {currentUser.role === 'admin' ? 'Quản trị viên' : 'Người dùng'}
+                      {(currentUser?.role || user?.role) === 'admin' ? 'Quản trị viên' : 'Người dùng'}
                     </span>
                   </div>
                 </div>
@@ -325,7 +527,7 @@ export default function ProfilePage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500 mb-1">Email</p>
-                      <p className="text-lg font-semibold text-gray-900">{currentUser.email}</p>
+                      <p className="text-lg font-semibold text-gray-900">{(currentUser || user)?.email || ''}</p>
                     </div>
                   </div>
 
@@ -335,7 +537,7 @@ export default function ProfilePage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500 mb-1">Số điện thoại</p>
-                      <p className="text-lg font-semibold text-gray-900">{currentUser.phone || 'Chưa cập nhật'}</p>
+                      <p className="text-lg font-semibold text-gray-900">{(currentUser || user)?.phone || 'Chưa cập nhật'}</p>
                     </div>
                   </div>
 
@@ -346,7 +548,7 @@ export default function ProfilePage() {
                     <div>
                       <p className="text-sm text-gray-500 mb-1">Ngày tham gia</p>
                       <p className="text-lg font-semibold text-gray-900">
-                        {safeFormatDate(currentUser.createdAt, 'dd/MM/yyyy', 'Chưa có thông tin')}
+                        {safeFormatDate((currentUser || user)?.createdAt, 'dd/MM/yyyy', 'Chưa có thông tin')}
                       </p>
                     </div>
                   </div>
@@ -541,19 +743,41 @@ export default function ProfilePage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                            booking.status === 'confirmed'
-                              ? 'bg-green-100 text-green-800'
-                              : booking.status === 'pending'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {booking.status === 'confirmed'
-                              ? 'Đã xác nhận'
-                              : booking.status === 'pending'
-                              ? 'Đang chờ'
-                              : 'Đã hủy'}
-                          </span>
+                          {(() => {
+                            // Check if show time has passed
+                            const isShowTimePassed = (showTime: string | Date | null | undefined): boolean => {
+                              if (!showTime) return false;
+                              const showDate = new Date(showTime);
+                              const now = new Date();
+                              return showDate < now;
+                            };
+                            
+                            let statusText = '';
+                            let statusClass = '';
+                            
+                            if (booking.status === 'cancelled') {
+                              statusText = 'Đã hủy';
+                              statusClass = 'bg-red-100 text-red-800';
+                            } else if (booking.status === 'confirmed') {
+                              // If show time has passed, show as "Đã thanh toán"
+                              if (isShowTimePassed(booking.schedule?.showTime)) {
+                                statusText = 'Đã thanh toán';
+                                statusClass = 'bg-blue-100 text-blue-800';
+                              } else {
+                                statusText = 'Đã xác nhận';
+                                statusClass = 'bg-green-100 text-green-800';
+                              }
+                            } else {
+                              statusText = 'Đang chờ';
+                              statusClass = 'bg-yellow-100 text-yellow-800';
+                            }
+                            
+                            return (
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusClass}`}>
+                                {statusText}
+                              </span>
+                            );
+                          })()}
                           <span className="text-xs text-gray-500">
                             Đặt vé lúc: {safeFormatDate(booking.createdAt, 'dd/MM/yyyy HH:mm', '-')}
                           </span>
@@ -581,6 +805,19 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Avatar Crop Modal */}
+      {imageToCrop && (
+        <AvatarCropModal
+          imageSrc={imageToCrop}
+          isOpen={showCropModal}
+          onClose={() => {
+            setShowCropModal(false);
+            setImageToCrop(null);
+          }}
+          onCropComplete={handleCropComplete}
+        />
+      )}
     </div>
   );
 }

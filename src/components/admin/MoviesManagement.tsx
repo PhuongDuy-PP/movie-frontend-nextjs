@@ -3,16 +3,41 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAPI, cinemaAPI } from '@/lib/api';
 import { Movie } from '@/types';
-import { useState } from 'react';
-import { FiEdit, FiTrash2, FiPlus, FiSearch, FiX, FiCheck, FiImage } from 'react-icons/fi';
+import { useState, useRef } from 'react';
+import { FiEdit, FiTrash2, FiPlus, FiSearch, FiX, FiCheck, FiImage, FiUpload } from 'react-icons/fi';
 import { format } from 'date-fns';
 import Image from 'next/image';
+
+// Movie genres list
+const MOVIE_GENRES = [
+  'Hành động',
+  'Phiêu lưu',
+  'Hoạt hình',
+  'Hài',
+  'Tội phạm',
+  'Tài liệu',
+  'Chính kịch',
+  'Gia đình',
+  'Fantasy',
+  'Lịch sử',
+  'Kinh dị',
+  'Nhạc kịch',
+  'Bí ẩn',
+  'Lãng mạn',
+  'Khoa học viễn tưởng',
+  'Thể thao',
+  'Giật gân',
+  'Chiến tranh',
+  'Western',
+];
 
 export default function MoviesManagement() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
+  const [posterPreview, setPosterPreview] = useState<string>('');
+  const posterInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -70,6 +95,103 @@ export default function MoviesManagement() {
     },
   });
 
+  // Helper function to compress image
+  const compressImage = (file: File, maxWidth: number = 1200, quality: number = 0.7): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = document.createElement('img');
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas context not available'));
+            return;
+          }
+
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                if (blob.size > 1024 * 1024) {
+                  canvas.toBlob(
+                    (smallerBlob) => {
+                      if (smallerBlob) {
+                        const reader2 = new FileReader();
+                        reader2.onloadend = () => {
+                          resolve(reader2.result as string);
+                        };
+                        reader2.onerror = reject;
+                        reader2.readAsDataURL(smallerBlob);
+                      } else {
+                        reject(new Error('Failed to compress image'));
+                      }
+                    },
+                    'image/jpeg',
+                    0.6
+                  );
+                } else {
+                  const reader2 = new FileReader();
+                  reader2.onloadend = () => {
+                    resolve(reader2.result as string);
+                  };
+                  reader2.onerror = reject;
+                  reader2.readAsDataURL(blob);
+                }
+              } else {
+                reject(new Error('Failed to compress image'));
+              }
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handlePosterUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        alert('Vui lòng chọn file hình ảnh');
+        return;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        alert('Kích thước file không được vượt quá 10MB');
+        return;
+      }
+
+      try {
+        const compressedBase64 = await compressImage(file, 1200, 0.7);
+        setFormData({ ...formData, poster: compressedBase64 });
+        setPosterPreview(compressedBase64);
+      } catch (error) {
+        console.error('Error compressing image:', error);
+        alert('Có lỗi xảy ra khi xử lý ảnh. Vui lòng thử lại.');
+      }
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       title: '',
@@ -84,7 +206,11 @@ export default function MoviesManagement() {
       rating: '',
       isActive: true,
     });
+    setPosterPreview('');
     setEditingMovie(null);
+    if (posterInputRef.current) {
+      posterInputRef.current.value = '';
+    }
   };
 
   const handleEdit = (movie: Movie) => {
@@ -102,12 +228,13 @@ export default function MoviesManagement() {
       rating: (Number(movie.rating) || 0).toString(),
       isActive: movie.isActive,
     });
+    setPosterPreview(movie.poster || '');
     setShowModal(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const data = {
+    const baseData = {
       title: formData.title,
       description: formData.description,
       director: formData.director,
@@ -118,13 +245,18 @@ export default function MoviesManagement() {
       poster: formData.poster || undefined,
       trailer: formData.trailer || undefined,
       rating: formData.rating ? parseFloat(formData.rating) : undefined,
-      isActive: formData.isActive,
     };
 
     if (editingMovie) {
-      updateMutation.mutate({ id: editingMovie.id, data });
+      // Include isActive only when updating
+      const updateData = {
+        ...baseData,
+        isActive: formData.isActive,
+      };
+      updateMutation.mutate({ id: editingMovie.id, data: updateData });
     } else {
-      createMutation.mutate(data);
+      // Don't include isActive when creating
+      createMutation.mutate(baseData);
     }
   };
 
@@ -271,13 +403,19 @@ export default function MoviesManagement() {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Thể loại *</label>
-                  <input
-                    type="text"
+                  <select
                     required
                     value={formData.genre}
                     onChange={(e) => setFormData({ ...formData, genre: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF6B35] focus:border-[#FF6B35]"
-                  />
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF6B35] focus:border-[#FF6B35] bg-white"
+                  >
+                    <option value="">-- Chọn thể loại --</option>
+                    {MOVIE_GENRES.map((genre) => (
+                      <option key={genre} value={genre}>
+                        {genre}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Đạo diễn *</label>
@@ -349,14 +487,84 @@ export default function MoviesManagement() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">URL Poster</label>
-                <input
-                  type="url"
-                  value={formData.poster}
-                  onChange={(e) => setFormData({ ...formData, poster: e.target.value })}
-                  placeholder="https://example.com/poster.jpg"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF6B35] focus:border-[#FF6B35]"
-                />
+                <label className="block text-sm font-bold text-gray-700 mb-2">Poster</label>
+                <div className="space-y-4">
+                  {/* Poster Preview */}
+                  {posterPreview && (
+                    <div className="relative w-full h-64 bg-gray-100 rounded-xl overflow-hidden border-2 border-gray-200">
+                      <Image
+                        src={posterPreview}
+                        alt="Poster Preview"
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                  )}
+
+                  {/* Upload Options */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* File Upload */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Upload từ máy tính
+                      </label>
+                      <input
+                        ref={posterInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePosterUpload}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => posterInputRef.current?.click()}
+                        className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl hover:border-[#FF6B35] hover:bg-[#FF6B35]/5 transition-all flex items-center justify-center gap-2 text-gray-700 font-semibold"
+                      >
+                        <FiUpload className="text-lg" />
+                        Chọn hình ảnh
+                      </button>
+                      <p className="text-xs text-gray-500 mt-2">Tối đa 10MB (JPG, PNG, GIF)</p>
+                    </div>
+
+                    {/* URL Input */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Hoặc nhập URL hình ảnh
+                      </label>
+                      <input
+                        type="url"
+                        value={formData.poster && !posterPreview.startsWith('data:') ? formData.poster : ''}
+                        onChange={(e) => {
+                          const url = e.target.value;
+                          setFormData({ ...formData, poster: url });
+                          if (url && !url.startsWith('data:')) {
+                            setPosterPreview(url);
+                          }
+                        }}
+                        placeholder="https://example.com/poster.jpg"
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF6B35] focus:border-[#FF6B35]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Remove Poster Button */}
+                  {posterPreview && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, poster: '' });
+                        setPosterPreview('');
+                        if (posterInputRef.current) {
+                          posterInputRef.current.value = '';
+                        }
+                      }}
+                      className="px-4 py-2 bg-red-100 text-red-700 rounded-lg font-semibold hover:bg-red-200 transition-colors flex items-center gap-2"
+                    >
+                      <FiX className="text-sm" />
+                      Xóa poster
+                    </button>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">URL Trailer</label>

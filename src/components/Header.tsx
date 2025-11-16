@@ -2,9 +2,29 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuthStore } from '@/store/auth-store';
 import { FiSearch, FiUser, FiLogOut, FiMenu, FiX } from 'react-icons/fi';
 import { useRouter, usePathname } from 'next/navigation';
+
+// Helper function to get full avatar URL
+const getAvatarUrl = (avatarPath: string | undefined | null): string | null => {
+  if (!avatarPath) return null;
+  
+  // If already a full URL (starts with http:// or https://), return as is
+  if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
+    return avatarPath;
+  }
+  
+  // If relative path (starts with /), prepend backend URL
+  if (avatarPath.startsWith('/')) {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    return `${backendUrl}${avatarPath}`;
+  }
+  
+  // Otherwise return as is (shouldn't happen but just in case)
+  return avatarPath;
+};
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -14,6 +34,14 @@ export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
+  const [avatarKey, setAvatarKey] = useState(Date.now());
+  
+  // Update avatar key when user avatar changes
+  useEffect(() => {
+    if (user?.avatar) {
+      setAvatarKey(Date.now());
+    }
+  }, [user?.avatar]);
 
   useEffect(() => {
     setMounted(true);
@@ -34,6 +62,14 @@ export default function Header() {
   const handleLogout = () => {
     logout();
     router.push('/');
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/movies?search=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchQuery('');
+    }
   };
 
   const navItems = [
@@ -110,7 +146,7 @@ export default function Header() {
           {/* Search and User */}
           <div className="hidden md:flex items-center space-x-3">
             {/* Search */}
-            <div className="relative group">
+            <form onSubmit={handleSearch} className="relative group">
               <div className="absolute inset-0 bg-gradient-to-r from-[#FF6B35]/20 to-[#FF8C42]/20 rounded-xl blur opacity-0 group-focus-within:opacity-100 transition-opacity duration-300"></div>
               <div className="relative flex items-center">
                 <FiSearch className="absolute left-4 text-gray-400 text-lg group-focus-within:text-[#FF6B35] transition-colors duration-300 z-10" />
@@ -121,15 +157,35 @@ export default function Header() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-11 pr-5 py-2.5 bg-gray-800/60 backdrop-blur-sm border border-gray-700/50 rounded-xl text-white placeholder-gray-400 w-64 focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50 focus:border-[#FF6B35] transition-all duration-300 hover:border-gray-600 hover:bg-gray-800/80"
                 />
+                <button
+                  type="submit"
+                  className="absolute right-2 p-2 text-gray-400 hover:text-[#FF6B35] transition-colors duration-300 z-10"
+                >
+                  <FiSearch className="text-lg" />
+                </button>
               </div>
-            </div>
+            </form>
 
             {/* User Menu */}
             {isAuthenticated ? (
               <div className="relative group">
                 <button className="flex items-center space-x-3 px-3 py-2 rounded-xl bg-gray-800/60 backdrop-blur-sm border border-gray-700/50 hover:bg-gray-700/60 transition-all duration-300 transform hover:scale-105">
-                  <div className="w-9 h-9 bg-gradient-to-br from-[#FF6B35] to-[#FF8C42] rounded-lg flex items-center justify-center shadow-md shadow-[#FF6B35]/30 group-hover:shadow-[#FF6B35]/50 transition-shadow duration-300">
-                    <FiUser className="text-sm text-white" />
+                  <div className="relative w-9 h-9 rounded-lg overflow-hidden shadow-md shadow-[#FF6B35]/30 group-hover:shadow-[#FF6B35]/50 transition-shadow duration-300 ring-2 ring-gray-700/50">
+                    {user?.avatar ? (
+                      <Image
+                        key={avatarKey}
+                        src={getAvatarUrl(user.avatar) ? `${getAvatarUrl(user.avatar)}?t=${avatarKey}` : ''}
+                        alt={user?.fullName || 'Avatar'}
+                        fill
+                        className="object-cover"
+                        sizes="36px"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-[#FF6B35] to-[#FF8C42] flex items-center justify-center">
+                        <FiUser className="text-sm text-white" />
+                      </div>
+                    )}
                   </div>
                   <span className="font-medium text-sm text-white hidden lg:block">{user?.fullName}</span>
                 </button>

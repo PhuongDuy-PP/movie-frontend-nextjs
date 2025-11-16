@@ -1,7 +1,11 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// Use proxy API route in browser to avoid CORS issues
+// The proxy route will forward requests to the backend
+const API_URL = typeof window !== 'undefined' 
+  ? '/api'  // Use Next.js API proxy in browser
+  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'); // Direct connection in server-side
 
 const api = axios.create({
   baseURL: API_URL,
@@ -16,6 +20,12 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  
+  // Don't set Content-Type for FormData - let browser set it with boundary
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
+  
   return config;
 });
 
@@ -48,6 +58,12 @@ export const authAPI = {
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token: string, newPassword: string) =>
     api.post('/auth/reset-password', { token, newPassword }),
+  uploadAvatar: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    // Don't set Content-Type header - let browser set it with boundary
+    return api.post('/users/me/avatar', formData);
+  },
 };
 
 // Movie APIs

@@ -32,6 +32,29 @@ export default function BookingsPage() {
     },
   });
 
+  // Helper function to check if show time has passed
+  const isShowTimePassed = (showTime: string | Date | null | undefined): boolean => {
+    if (!showTime) return false;
+    const showDate = new Date(showTime);
+    const now = new Date();
+    return showDate < now;
+  };
+
+  // Helper function to get display status
+  const getDisplayStatus = (booking: any) => {
+    if (booking.status === 'cancelled') {
+      return { text: 'Đã hủy', className: 'bg-red-100 text-red-800' };
+    }
+    if (booking.status === 'confirmed') {
+      // If show time has passed, show as "Đã thanh toán"
+      if (isShowTimePassed(booking.schedule?.showTime)) {
+        return { text: 'Đã thanh toán', className: 'bg-blue-100 text-blue-800' };
+      }
+      return { text: 'Đã xác nhận', className: 'bg-green-100 text-green-800' };
+    }
+    return { text: 'Đang chờ', className: 'bg-yellow-100 text-yellow-800' };
+  };
+
   if (!isAuthenticated) {
     return null;
   }
@@ -94,25 +117,18 @@ export default function BookingsPage() {
                     </div>
                     <div>
                       <p className="text-gray-600">Trạng thái</p>
-                      <span
-                        className={`px-3 py-1 rounded ${
-                          booking.status === 'confirmed'
-                            ? 'bg-green-100 text-green-800'
-                            : booking.status === 'cancelled'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}
-                      >
-                        {booking.status === 'confirmed'
-                          ? 'Đã xác nhận'
-                          : booking.status === 'cancelled'
-                          ? 'Đã hủy'
-                          : 'Đang chờ'}
-                      </span>
+                      {(() => {
+                        const statusInfo = getDisplayStatus(booking);
+                        return (
+                          <span className={`px-3 py-1 rounded ${statusInfo.className}`}>
+                            {statusInfo.text}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
-                {booking.status === 'confirmed' && (
+                {booking.status === 'confirmed' && !isShowTimePassed(booking.schedule?.showTime) && (
                   <button
                     onClick={() => {
                       if (confirm('Bạn có chắc muốn hủy vé này?')) {
